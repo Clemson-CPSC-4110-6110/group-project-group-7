@@ -1,14 +1,12 @@
 using UnityEngine;
-using UnityEngine.UI; // Needed for UI
-using TMPro; // Needed for TextMeshPro
-using System.Collections; // Needed for Coroutines (pauses)
+using UnityEngine.UI; 
+using TMPro; 
+using System.Collections; 
 
 public class LiftLevelController : MonoBehaviour
 {
     [Header("Level Configuration")]
-    [Tooltip("Level markers in order from top to bottom")]
     public Transform[] levels;
-    [Tooltip("Drag your WindowSurface objects here in the same order as the markers!")]
     public WindowCleaner[] windows;
 
     [Header("Movement settings")]
@@ -20,19 +18,29 @@ public class LiftLevelController : MonoBehaviour
     public TextMeshProUGUI percentageText; 
     public Image progressBarFill;
 
-    [Header("Audio")]
-    public AudioSource audioSource;
+    [Header("End Game UI")]
+    public GameObject endGamePanel;
+    public TextMeshProUGUI endGameText;
+
+    [Header("Audio - SFX")]
+    public AudioSource sfxSource; // For Dings, Game Over, Victory
     public AudioClip dingSound;
+    public AudioClip gameOverSound;
+    public AudioClip victorySound;
+
+    [Header("Audio - Movement")]
+    public AudioSource movementSource; // For the looping engine hum
 
     private int targetLevel;
     private bool isMoving = false;
-    private bool isTransitioning = false; // Prevents checking while the "Level Complete" pause happens
-    
+    private bool isTransitioning = false; 
     private float checkInterval = 0.5f;
     private float nextCheckTime = 0f;
 
     private void Start()
     {
+        Time.timeScale = 1f;
+
         if (levels == null || levels.Length == 0)
         {
             Debug.LogError("No levels assigned to LiftLevelController.");
@@ -44,6 +52,8 @@ public class LiftLevelController : MonoBehaviour
         transform.position = levels[currentLevel].position;
 
         UpdateUI(currentLevel);
+
+        if (movementSource != null) movementSource.Stop();
     }
 
     private void Update()
@@ -52,10 +62,16 @@ public class LiftLevelController : MonoBehaviour
 
         Vector3 targetPosition = levels[targetLevel].position;
 
-        // --- MOVEMENT LOGIC ---
         if (Vector3.Distance(transform.position, targetPosition) > 0.001f)
         {
             isMoving = true;
+
+            // START MOVEMENT SOUND
+            if (movementSource != null && !movementSource.isPlaying)
+            {
+                movementSource.Play();
+            }
+
             transform.position = Vector3.MoveTowards(
                 transform.position,
                 targetPosition,
@@ -64,16 +80,20 @@ public class LiftLevelController : MonoBehaviour
         }
         else
         {
-            // We have arrived at a floor!
             if (isMoving) 
             {
                 currentLevel = targetLevel;
                 isMoving = false;
-                UpdateUI(currentLevel); // Reset UI for the new floor
+
+                // STOP MOVEMENT SOUND
+                if (movementSource != null)
+                {
+                    movementSource.Stop();
+                }
+
+                UpdateUI(currentLevel);
             }
 
-            // --- PROGRESS CHECK LOGIC ---
-            // Only check the window if we are stopped, not transitioning, and it's time to check
             if (!isMoving && !isTransitioning && currentLevel < windows.Length)
             {
                 if (Time.time >= nextCheckTime)
@@ -87,15 +107,11 @@ public class LiftLevelController : MonoBehaviour
 
     void CheckCurrentWindow()
     {
-        // Ask the current window how clean it is
         float progress = windows[currentLevel].GetCleanPercentage();
-        
-        // Update the UI
         progressBarFill.fillAmount = progress;
         int percent = Mathf.Clamp(Mathf.RoundToInt(progress * 100f), 0, 100);
         percentageText.text = percent + "%";
 
-        // If it's 95% clean, trigger the win sequence!
         if (progress >= 0.95f)
         {
             StartCoroutine(HandleLevelComplete());
@@ -104,33 +120,23 @@ public class LiftLevelController : MonoBehaviour
 
     IEnumerator HandleLevelComplete()
     {
-        isTransitioning = true; // Lock the script so it doesn't double-fire
+        isTransitioning = true;
+        if (sfxSource != null && dingSound != null) sfxSource.PlayOneShot(dingSound);
 
-        // 1. Play the Ding!
-        if (audioSource != null && dingSound != null)
-        {
-            audioSource.PlayOneShot(dingSound);
-        }
-
-        // 2. Force UI to show 100% and success text
         levelText.text = "LEVEL COMPLETE!";
         progressBarFill.fillAmount = 1f;
         percentageText.text = "100%";
-
-        // 3. Pause for 2 seconds to let the player read it
+      
         yield return new WaitForSeconds(2f);
 
-        // 4. Automatically move the lift down!
         if (currentLevel < levels.Length - 1)
         {
-            isTransitioning = false; // Unlock
+            isTransitioning = false; 
             MoveDown();
         }
         else
         {
-            // No more levels to go down to!
-            levelText.text = "YOU'RE HIRED!";
-            percentageText.text = "";
+            GameComplete();
         }
     }
 
@@ -156,11 +162,50 @@ public class LiftLevelController : MonoBehaviour
 
     void UpdateUI(int levelIndex)
     {
-        // MATH MAGIC: If we have 6 levels, and we are on Index 0 (top), Floor = 6. 
-        int gameLevel = 1+levelIndex;
-        
+        int gameLevel = 1 + levelIndex;
         levelText.text = "LEVEL " + gameLevel;
         progressBarFill.fillAmount = 0f;
         percentageText.text = "0%";
+    }
+    
+    public void GameOver(string reason)
+    {
+        if (sfxSource != null && gameOverSound != null)
+        {
+            sfxSource.PlayOneShot(gameOverSound);
+        }
+        
+        if (movementSource != null) movementSource.Stop();
+
+        isMoving = false; 
+        isTransitioning = true; 
+
+        endGamePanel.SetActive(true);
+        endGameText.color = Color.red;
+        endGameText.text = "GAME OVER\n<size=50%>" + reason + "</size>";
+
+        Time.timeScale = 0f; 
+    }
+
+    public void GameComplete()
+    {
+        if (sfxSource != null && victorySound != null)
+        {
+            sfxSource.PlayOneShot(victorySound);
+        }
+
+        if (movementSource != null) movementSource.Stop();
+
+        isMoving = false;
+        isTransitioning = true;
+
+        endGamePanel.SetActive(true);
+        endGameText.color = Color.green;
+        endGameText.text = "GAME COMPLETE!\n<size=50%>YOU'RE HIRED!</size>";
+        
+        levelText.gameObject.SetActive(false); 
+        percentageText.gameObject.SetActive(false);
+
+        Time.timeScale = 0f;
     }
 }

@@ -36,7 +36,6 @@ public class WindowCleaner : MonoBehaviour
 
     void OnTriggerStay(Collider other)
     {
-        // --- NEW BUBBLE LOGIC: Turn on particles if they exist ---
         ParticleSystem toolFX = other.GetComponentInChildren<ParticleSystem>();
         if (toolFX != null && !toolFX.isEmitting)
         {
@@ -61,7 +60,6 @@ public class WindowCleaner : MonoBehaviour
 
     void OnTriggerExit(Collider other)
     {
-        // --- NEW BUBBLE LOGIC: Turn off particles when we leave the window ---
         ParticleSystem toolFX = other.GetComponentInChildren<ParticleSystem>();
         if (toolFX != null)
         {
@@ -141,7 +139,11 @@ public class WindowCleaner : MonoBehaviour
         int cY = (int)(uv.y * textureSize);
         bool changed = false;
         
-        Vector3 bladeDir = toolRotation * Vector3.right; 
+        Vector3 worldRight = toolRotation * Vector3.right;
+        Vector3 localRight = transform.InverseTransformDirection(worldRight);
+        
+        Vector2 bladeDir = new Vector2(localRight.x, localRight.y).normalized;
+        
         float halfWidth = bladeWidth / 2f;
         int searchRange = (int)bladeWidth;
 
@@ -152,8 +154,10 @@ public class WindowCleaner : MonoBehaviour
                 if (x >= 0 && x < textureSize && y >= 0 && y < textureSize)
                 {
                     Vector2 dirToPixel = new Vector2(x - cX, y - cY);
-                    float projection = Vector2.Dot(dirToPixel, new Vector2(bladeDir.x, bladeDir.y));
-                    float distFromLine = Vector2.Distance(dirToPixel, new Vector2(bladeDir.x, bladeDir.y) * projection);
+                    
+                    float projection = Vector2.Dot(dirToPixel, bladeDir);
+                    
+                    float distFromLine = Vector2.Distance(dirToPixel, bladeDir * projection);
 
                     if (Mathf.Abs(projection) < halfWidth && distFromLine < (bladeHeight / 2f))
                     {
@@ -177,8 +181,6 @@ public class WindowCleaner : MonoBehaviour
         Color[] pixels = maskTexture.GetPixels();
         int cleanPixelCount = 0;
 
-        // We check the Red channel. 
-        // Dirt = 0.0, Soap = 0.5, Clean = 1.0
         for (int i = 0; i < pixels.Length; i++)
         {
             if (pixels[i].r > 0.8f) 
