@@ -31,11 +31,16 @@ public class LiftLevelController : MonoBehaviour
     [Header("Audio - Movement")]
     public AudioSource movementSource; // For the looping engine hum
 
+    [Header("Fall Recovery UI")]
+    public Button resetPositionButton;
+
     private int targetLevel;
     private bool isMoving = false;
     private bool isTransitioning = false; 
     private float checkInterval = 0.5f;
     private float nextCheckTime = 0f;
+
+    private EquipmentTracker equipmentTracker;
 
     private void Start()
     {
@@ -54,6 +59,11 @@ public class LiftLevelController : MonoBehaviour
         UpdateUI(currentLevel);
 
         if (movementSource != null) movementSource.Stop();
+
+        if (resetPositionButton != null)
+        {
+            resetPositionButton.gameObject.SetActive(false);
+        }
     }
 
     private void Update()
@@ -167,7 +177,45 @@ public class LiftLevelController : MonoBehaviour
         progressBarFill.fillAmount = 0f;
         percentageText.text = "0%";
     }
-    
+
+    public void ShowFallPanel(EquipmentTracker tracker)
+    {
+        equipmentTracker = tracker;
+ 
+        if (movementSource != null) movementSource.Stop();
+ 
+        // Show panel with a warning colour (yellow) and the reset option
+        endGamePanel.SetActive(true);
+        endGameText.color = Color.yellow;
+        endGameText.text = "YOU FELL!\n<size=50%>Reset your position to continue.</size>";
+ 
+        // Wire up and show the reset button
+        if (resetPositionButton != null)
+        {
+            resetPositionButton.gameObject.SetActive(true);
+            resetPositionButton.onClick.RemoveAllListeners();
+            resetPositionButton.onClick.AddListener(ResetPlayerPosition);
+        }
+ 
+        // Do NOT freeze time — the lift stays put and the player can look around
+    }
+ 
+    // Called by the Reset Position button
+    public void ResetPlayerPosition()
+    {
+        // Hide the panel and button
+        endGamePanel.SetActive(false);
+ 
+        if (resetPositionButton != null)
+            resetPositionButton.gameObject.SetActive(false);
+ 
+        // Tell the tracker to move the player back and re-enable monitoring
+        if (equipmentTracker != null)
+            equipmentTracker.ResetPlayerPosition();
+ 
+        equipmentTracker = null;
+    }
+
     public void GameOver(string reason)
     {
         if (sfxSource != null && gameOverSound != null)
