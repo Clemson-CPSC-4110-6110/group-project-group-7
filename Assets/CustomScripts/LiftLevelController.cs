@@ -17,6 +17,7 @@ public class LiftLevelController : MonoBehaviour
     public TextMeshProUGUI levelText;
     public TextMeshProUGUI percentageText; 
     public Image progressBarFill;
+    public TextMeshProUGUI tipText; //Testing a $ tip UI for completing windows based on speed
 
     [Header("End Game UI")]
     public GameObject endGamePanel;
@@ -34,6 +35,12 @@ public class LiftLevelController : MonoBehaviour
     [Header("Fall Recovery UI")]
     public Button resetPositionButton;
 
+    [Header("Tip Settings")]
+    public float baseTipPerLevel = 50f;
+    public float maxSpeedBonus = 30f;
+    public float maxCleanlinessBonus = 20f;
+    public float speedBonusTime = 60f; // Clean within this time for full speed bonus amount
+
     private int targetLevel;
     private bool isMoving = false;
     private bool isTransitioning = false; 
@@ -41,6 +48,10 @@ public class LiftLevelController : MonoBehaviour
     private float nextCheckTime = 0f;
 
     private EquipmentTracker equipmentTracker;
+
+    //Tip tracking
+    private float totalTips = 0f;
+    private float levelStartTime = 0f; 
 
     private void Start()
     {
@@ -64,6 +75,9 @@ public class LiftLevelController : MonoBehaviour
         {
             resetPositionButton.gameObject.SetActive(false);
         }
+
+        UpdateTipUI();
+        levelStartTime = Time.time;
     }
 
     private void Update()
@@ -102,6 +116,8 @@ public class LiftLevelController : MonoBehaviour
                 }
 
                 UpdateUI(currentLevel);
+
+                levelStartTime = Time.time; //Start timing for new level
             }
 
             if (!isMoving && !isTransitioning && currentLevel < windows.Length)
@@ -131,13 +147,39 @@ public class LiftLevelController : MonoBehaviour
     IEnumerator HandleLevelComplete()
     {
         isTransitioning = true;
+
+        // Calculate tips for the level
+        float timeSpent = Time.time - levelStartTime;
+        float cleanPercent = windows[currentLevel].GetCleanPercentage();
+
+        //Speed bonus
+        float speedRatio = Mathf.Clamp01(1f - (timeSpent / (speedBonusTime * 2f)));
+        float speedBonus = Mathf.Round(speedRatio * maxSpeedBonus);
+
+        //Cleanliness bonus scales 
+        float cleanRatio = Mathf.Clamp01((cleanPercent - 0.95f) / 0.05f);
+        float cleanBonus = Mathf.Round(cleanRatio * maxCleanlinessBonus);
+
+        float levelTip = baseTipPerLevel + speedBonus + cleanBonus;
+        totalTips += levelTip;
+
         if (sfxSource != null && dingSound != null) sfxSource.PlayOneShot(dingSound);
 
         levelText.text = "LEVEL COMPLETE!";
         progressBarFill.fillAmount = 1f;
         percentageText.text = "100%";
+        percentageText.color = Color.green;
+
+        // shows how much was earned this level
+        if (tipText != null)
+        {
+            tipText.text = $"Tips: ${totalTips:0}\n<size=70%><color=green>+${levelTip:0} this level!</color></size>";
+        }
       
         yield return new WaitForSeconds(2f);
+
+        percentageText.color = Color.white;
+        UpdateTipUI();
 
         if (currentLevel < levels.Length - 1)
         {
@@ -147,6 +189,14 @@ public class LiftLevelController : MonoBehaviour
         else
         {
             GameComplete();
+        }
+    }
+
+    void UpdateTipUI()
+    {
+        if (tipText != null)
+        {
+            tipText.text = $"Tips: ${totalTips:0}";
         }
     }
 
@@ -249,7 +299,10 @@ public class LiftLevelController : MonoBehaviour
 
         endGamePanel.SetActive(true);
         endGameText.color = Color.green;
-        endGameText.text = "GAME COMPLETE!\n<size=50%>YOU'RE HIRED!</size>";
+
+        // Final tip breakdown
+        float maxPossible = (baseTipPerLevel + maxSpeedBonus + maxCleanlinessBonus) * levels.Length;
+        endGameText.text = $"GAME COMPLETE!\n<size=50%>YOU'RE HIRED!\n\nTotal Tips: ${totalTips:0}  /  ${maxPossible:0} possible</size>";
         
         levelText.gameObject.SetActive(false); 
         percentageText.gameObject.SetActive(false);
