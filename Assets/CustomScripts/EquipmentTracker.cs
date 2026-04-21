@@ -33,9 +33,7 @@ public class EquipmentTracker : MonoBehaviour
 
     void Update()
     {
-        if (gameIsOver) return;
-
-        if (startupDelay > 0)
+        if (gameIsOver || startupDelay > 0f)
         {
             startupDelay -= Time.deltaTime;
             return;
@@ -48,7 +46,6 @@ public class EquipmentTracker : MonoBehaviour
         if (playerDist > maxAllowedDistance)
         {
             TriggerGameOver("You fell off the lift!");
-            //TriggerPlayerFall();
             return;
         }
 
@@ -61,8 +58,6 @@ public class EquipmentTracker : MonoBehaviour
                 if (toolDist > maxAllowedDistance)
                 {
                     SnapToolBack(i);
-                    //TriggerGameOver("You dropped your equipment!");
-                    //return;
                 }
             }
         }
@@ -71,21 +66,18 @@ public class EquipmentTracker : MonoBehaviour
     void SnapToolBack(int index)
     {
         if (tools[index] == null) return;
- 
+
         tools[index].position = toolSpawnPositions[index];
         tools[index].rotation = toolSpawnRotations[index];
- 
+
         Rigidbody rb = tools[index].GetComponent<Rigidbody>();
         if (rb != null && !rb.isKinematic)
         {
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }
- 
-        Debug.Log($"[EquipmentTracker] {tools[index].name} snapped back to spawn.");
     }
- 
-    // Call this from UI button to snap all tools back manually
+
     public void ResetEquipment()
     {
         for (int i = 0; i < tools.Length; i++)
@@ -93,45 +85,29 @@ public class EquipmentTracker : MonoBehaviour
             SnapToolBack(i);
         }
     }
- 
-    void TriggerPlayerFall()
+
+    void SafeTeleportPlayer(Vector3 targetPosition)
     {
-        // Show the fall panel but don't end the game — let the player reset
-        gameIsOver = true; // Pause checking while panel is visible
- 
-        if (liftController != null)
-        {
-            liftController.ShowFallPanel(this);
-        }
+        if (playerRig == null || playerHead == null) return;
+
+        Vector3 headOffset = playerHead.position - playerRig.position;
+        headOffset.y = 0f;
+
+        CharacterController cc = playerRig.GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+
+        playerRig.position = targetPosition - headOffset;
+
+        if (cc != null) cc.enabled = true;
     }
- 
-    // Called by LiftLevelController when player hits the Reset button
-    public void ResetPlayerPosition()
-    {
-        if (playerRig != null && respawnPoint != null && playerHead != null)
-        {
-            Vector3 headOffset = playerHead.position - playerRig.position;
-            headOffset.y = 0;
-            playerRig.position = respawnPoint.position - headOffset;
-        }
- 
-        // Also snap tools back on reset
-        ResetEquipment();
- 
-        // Re-enable tracking after a short moment so the teleport doesn't immediately re-trigger
-        gameIsOver = false;
-        startupDelay = 1.5f;
-    }
+
     void TriggerGameOver(string reason)
     {
         gameIsOver = true;
 
-        if (playerRig != null && respawnPoint != null && playerHead != null)
+        if (respawnPoint != null)
         {
-            Vector3 headOffset = playerHead.position - playerRig.position;
-            headOffset.y = 0; 
-
-            playerRig.position = respawnPoint.position - headOffset;
+            SafeTeleportPlayer(respawnPoint.position);
         }
 
         for (int i = 0; i < tools.Length; i++)
@@ -149,6 +125,9 @@ public class EquipmentTracker : MonoBehaviour
             }
         }
 
-        if (liftController != null) liftController.GameOver(reason);
+        if (liftController != null)
+        {
+            liftController.GameOver(reason);
+        }
     }
 }
